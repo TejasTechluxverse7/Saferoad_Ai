@@ -23,17 +23,17 @@ AegisRoad AI is an advanced, production-grade modular system designed for real-t
 *   **Evidence Package Creation**: Every incident triggers the capture of a "Digital Evidence Package" containing pre/post accident frames and JSON metadata.
 *   **Explainable AI (XAI)**: Generates **Grad-CAM heatmaps** for high-severity events, visually highlighting *exactly* why the AI flagged a specific region as an accident.
 
-### 🌐 Smart City Integration
-*   **Interactive Glassmorphism Dashboard**: A premium, high-performance web UI featuring live MJPEG analysis streams, real-time event logs, and system health metrics.
-*   **Video Upload Analysis**: Allows users to upload any road footage for immediate "Post-Event" AI analysis with the same real-time overlays.
-*   **Smart Routing (A*)**: Automated ambulance dispatching that uses the A* search algorithm to find the fastest path to the nearest hospital via a custom city road graph.
-*   **VANET / V2X Alerting**: Broadcasts standardized JSON messages over MQTT/HTTP to simulate Vehicle-to-Infrastructure (V2I) communication for upcoming autonomous vehicles.
-*   **Multi-Camera ReID**: Uses a ResNet-18 backbone to re-identify vehicles across different camera feeds, maintaining global identity for forensic investigations.
+### 🚑 Alerting & Smart City Logistics
+*   **Nearest Hospital Dispatch**: Integrated **OLA Maps API** logic that automatically identifies the closest medical facility based on the incident's GPS coordinates.
+*   **VANET / V2X Layer**: Implements a dedicated **Vehicular Ad-Hoc Network** protocol that broadcasts standardized JSON alerts over MQTT. This allows Road-Side Units (RSUs) and nearby smart vehicles to receive instant traffic warnings.
+*   **Smart Routing (A*)**: Beyond simple distance, the system uses the **A* search algorithm** over a local city road graph (`city_graph.json`) to compute the optimized path for ambulances.
+*   **Dynamic Geolocation Engine**: Parses location strings into real-world coordinates, powering the real-time **Leaflet.js Heatmap** on the dashboard.
+*   **Image-to-URL Evidence Pipe**: Automatically converts captured accident frames into cloud-accessible URLs, enabling instant visual context for emergency dispatchers via SMS or Chat backends.
 
-### ⚡ Performance Optimization
-*   **Lazy XAI Rendering**: Grad-CAM is only computed for high-severity events to preserve CPU/GPU resources.
-*   **Intelligent Frame Skipping**: Processes every 2nd or 3rd frame to ensure 30+ FPS performance on edge devices without losing tracking continuity.
-*   **GPU Acceleration**: Native support for CUDA and MPS (Apple Silicon) backends.
+### 🌐 Smart City Dashboard
+*   **Interactive Glassmorphism UI**: A premium, high-performance web interface for centralized monitoring, featuring MJPEG streams and live incident counts.
+*   **Video Upload Analysis**: Allows users to upload and process road footage from their local PC, viewing the same high-fidelity AI overlays in a "Post-Event" forensic mode.
+*   **Multi-Camera ReID**: Uses a ResNet-18 backbone to re-identify and track vehicles across different camera viewpoints, maintaining a global "Chain of Custody" for forensic data.
 
 ---
 
@@ -58,19 +58,18 @@ Run the main orchestrator with a sample accident video to see the full HUD and l
 python saferoad_main.py --source sample_videos/acci.mp4
 ```
 *   **Keyboard Controls**: `Q` to Quit, `P` to Pause, `R` to Replay.
-*   **What to look for**: Trajectory lines (fading), Speed arrows, Pulsing near-miss circles, Severity banners.
 
 ### 2. Automated Feature Check
-Verify every internal engine (Detection, Tracking, Prediction, Severity, Routing, etc.) with the built-in validation script:
+Verify every internal engine (Detection, Tracking, Prediction, Severity, Routing, Hospital Lookup) with the dedicated validation script:
 ```bash
 python verify_features.py
 ```
 
-### 3. Dashboard & Upload Testing
-Launch the full API stack and interact via the web browser:
+### 3. Dashboard, Upload & VANET Testing
 1. Start: `python saferoad_main.py --source sample_videos/dashcam.mp4 --port 5050`
-2. Open **http://localhost:5050**
-3. **Upload Video**: Drag/drop a file on the "Upload Video" tab to trigger the remote analysis pipeline.
+2. Open **http://localhost:5050** to view live analysis.
+3. Use the **Upload Video** tab to process local footage.
+4. Subscribe to the `saferoad/accidents` topic on your MQTT broker to see the VANET alert steam.
 
 ---
 
@@ -90,8 +89,8 @@ Outputs trained weights to `models/aegis_model.pt`.
 *   `engine/`: Core logic (Severity, Forensic, GradCAM, Victim Detector, Evidence).
 *   `tracking/`: ByteTrack wrapper.
 *   `prediction/`: Trajectory and Near-miss engines.
-*   `api/`: Flask-SocketIO server and A* Routing.
-*   `dashboard/`: Front-end glassmorphism UI.
+*   `api/`: Flask-SocketIO server, OLA Maps Hospital Lookup, and A* Routing.
+*   `vanet_layer.py`: V2X alert implementation.
 
 ---
 
