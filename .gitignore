@@ -1,0 +1,5 @@
+myenv/
+runs/
+__pycache__/
+.env
+.vercel
