@@ -62,7 +62,7 @@ python saferoad_main.py --source sample_videos/acci.mp4
 ### 2. Automated Feature Check
 Verify every internal engine (Detection, Tracking, Prediction, Severity, Routing, Hospital Lookup) with the dedicated validation script:
 ```bash
-python verify_features.py
+python scripts/verify_features.py
 ```
 
 ### 3. Dashboard, Upload & VANET Testing
@@ -86,11 +86,16 @@ Outputs trained weights to `models/aegis_model.pt`.
 ## 📁 Project Structure
 
 *   `saferoad_main.py`: Main system orchestrator.
-*   `engine/`: Core logic (Severity, Forensic, GradCAM, Victim Detector, Evidence).
+*   `model_train.py`: Automated training pipeline.
+*   `engine/`: Core logic (Temporal Verification, Severity, Forensic, GradCAM, Victim Detector, Evidence).
+*   `vanet/`: V2X/VANET alert protocol and subscriber.
+*   `api/`: Flask-SocketIO server, OLA Maps Hospital Lookup, and A* Routing.
+*   `dashboard/`: Front-end glassmorphism UI.
 *   `tracking/`: ByteTrack wrapper.
 *   `prediction/`: Trajectory and Near-miss engines.
-*   `api/`: Flask-SocketIO server, OLA Maps Hospital Lookup, and A* Routing.
-*   `vanet_layer.py`: V2X alert implementation.
+*   `fusion/`: ReID multi-camera engine.
+*   `scripts/`: Utility, verification, and maintenance scripts.
+*   `legacy/`: Archived prototypes and original scripts.
 
 ---
 

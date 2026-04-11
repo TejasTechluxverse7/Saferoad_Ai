@@ -49,14 +49,14 @@ from ultralytics import YOLO
 # ── AegisRoad AI modules ──────────────────────────────────────────────────────
 from tracking.bytetrack_wrapper import ByteTrackWrapper
 from prediction.trajectory_engine import TrajectoryEngine
-from temporal_module import Detection, TemporalAccidentVerifier
+from engine.temporal_module import Detection, TemporalAccidentVerifier
 from engine.severity_classifier import SeverityClassifier, SeverityLevel
 from engine.evidence_buffer import EvidenceBuffer
 from engine.forensics_engine import ForensicsEngine
 from engine.gradcam import GradCAMExplainer
 from engine.victim_detector import VictimDetector
 from fusion.reid_engine import ReIDEngine, GlobalTracker
-from vanet_layer import build_accident_alert, publish_mqtt_alert
+from vanet.vanet_layer import build_accident_alert, publish_mqtt_alert
 from api.saferoad_api import (
     emit_accident_event,
     emit_near_miss_event,
@@ -550,7 +550,7 @@ class AegisPipeline:
                 vanet = build_accident_alert(self.location_str, temporal_conf, self.camera_id)
                 publish_mqtt_alert(vanet)
 
-                from vanet_layer import parse_location_string
+                from vanet.vanet_layer import parse_location_string
                 loc = parse_location_string(self.location_str) or {"lat": 0.0, "lon": 0.0}
                 emit_accident_event({
                     "event_id":       event_id,

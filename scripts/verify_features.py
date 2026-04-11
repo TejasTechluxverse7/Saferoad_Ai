@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 
 # Fix paths
-sys.path.insert(0, str(Path(__file__).parent.resolve()))
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
 
 errors = []
 results = []
@@ -106,7 +106,7 @@ def run_tests():
 
     # ── 9. VANET Alerts ──
     try:
-        from vanet_layer import build_accident_alert
+        from vanet.vanet_layer import build_accident_alert
         alert_payload = build_accident_alert("28.5439, 77.3305", 0.95, "cam1")
         log("9. VANET Data Sync", True, "Alert payload generated successfully")
     except Exception as e:

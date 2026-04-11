@@ -8,6 +8,7 @@ from .evidence_buffer import EvidenceBuffer
 from .forensics_engine import ForensicsEngine
 from .gradcam import GradCAMExplainer
 from .victim_detector import VictimDetector
+from .temporal_module import Detection, TemporalAccidentVerifier
 
 __all__ = [
     "SeverityClassifier", "SeverityLevel",
@@ -15,4 +16,5 @@ __all__ = [
     "ForensicsEngine",
     "GradCAMExplainer",
     "VictimDetector",
+    "Detection", "TemporalAccidentVerifier",
 ]
