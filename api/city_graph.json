@@ -1,0 +1,40 @@
+{
+  "nodes": [
+    {"id": "H1", "lat": 28.5200, "lon": 77.3100, "name": "Sector 15 Junction"},
+    {"id": "H2", "lat": 28.5280, "lon": 77.3200, "name": "Noida Expressway Entry"},
+    {"id": "H3", "lat": 28.5350, "lon": 77.3250, "name": "DND Flyway Toll"},
+    {"id": "H4", "lat": 28.5400, "lon": 77.3300, "name": "Sector 18 Signal"},
+    {"id": "H5", "lat": 28.5439, "lon": 77.3305, "name": "Accident Zone (Default)"},
+    {"id": "H6", "lat": 28.5490, "lon": 77.3350, "name": "Sector 62 Hospital Gate"},
+    {"id": "H7", "lat": 28.5550, "lon": 77.3400, "name": "NH-58 Junction"},
+    {"id": "H8", "lat": 28.5600, "lon": 77.3450, "name": "Metro Station Road"},
+    {"id": "H9", "lat": 28.5650, "lon": 77.3500, "name": "AIIMS Trauma Centre"},
+    {"id": "H10", "lat": 28.5150, "lon": 77.3050, "name": "Kalindi Kunj Bridge"},
+    {"id": "H11", "lat": 28.5250, "lon": 77.3150, "name": "Botanical Garden"},
+    {"id": "H12", "lat": 28.5300, "lon": 77.3180, "name": "Film City Chowk"},
+    {"id": "HOSP1", "lat": 28.5700, "lon": 77.3520, "name": "Max Super Speciality Hospital"},
+    {"id": "HOSP2", "lat": 28.5100, "lon": 77.3000, "name": "Apollo Hospital Noida"},
+    {"id": "HOSP3", "lat": 28.5800, "lon": 77.3600, "name": "Kailash Hospital & Research"}
+  ],
+  "edges": [
+    {"from": "H10", "to": "H1",  "weight_km": 0.8, "road": "Kalindi Kunj Road"},
+    {"from": "H1",  "to": "H2",  "weight_km": 1.2, "road": "Noida Expressway"},
+    {"from": "H2",  "to": "H3",  "weight_km": 0.9, "road": "Noida Expressway"},
+    {"from": "H3",  "to": "H4",  "weight_km": 0.7, "road": "DND Service Road"},
+    {"from": "H4",  "to": "H5",  "weight_km": 0.5, "road": "Sector 18 Inner Road"},
+    {"from": "H5",  "to": "H6",  "weight_km": 0.8, "road": "Sector 62 Road"},
+    {"from": "H6",  "to": "H7",  "weight_km": 1.1, "road": "NH-58"},
+    {"from": "H7",  "to": "H8",  "weight_km": 0.6, "road": "Metro Feeder Road"},
+    {"from": "H8",  "to": "H9",  "weight_km": 0.9, "road": "Hospital Access Road"},
+    {"from": "H9",  "to": "HOSP1","weight_km": 0.3, "road": "AIIMS Approach"},
+    {"from": "H1",  "to": "H11", "weight_km": 0.6, "road": "Botanical Garden Road"},
+    {"from": "H11", "to": "H12", "weight_km": 0.4, "road": "Film City Road"},
+    {"from": "H12", "to": "H2",  "weight_km": 0.5, "road": "Expressway Link"},
+    {"from": "H10", "to": "HOSP2","weight_km": 0.4, "road": "Apollo Approach"},
+    {"from": "H7",  "to": "HOSP3","weight_km": 1.8, "road": "Kailash Hospital Road"},
+    {"from": "H5",  "to": "H11", "weight_km": 0.9, "road": "Cross Sector Road"},
+    {"from": "H4",  "to": "H12", "weight_km": 0.7, "road": "Market Road"}
+  ],
+  "hospitals": ["HOSP1", "HOSP2", "HOSP3"],
+  "default_accident_node": "H5"
+}

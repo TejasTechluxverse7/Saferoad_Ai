@@ -1,0 +1,1354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AegisRoad AI – Intelligent Road Safety Dashboard</title>
+  <meta name="description" content="Real-time AI-powered accident detection, prediction, severity classification, forensic replay, and local video analysis dashboard."/>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+  <!-- Socket.IO -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <style>
+    /* ── Design Tokens ────────────────────────────────────────────── */
+    :root {
+      --bg:           #080b14;
+      --bg2:          #0d1220;
+      --bg3:          #111827;
+      --surface:      rgba(16,20,35,0.85);
+      --glass:        rgba(255,255,255,0.04);
+      --glass-border: rgba(255,255,255,0.08);
+      --accent:       #3b82f6;
+      --accent2:      #8b5cf6;
+      --accent3:      #06b6d4;
+      --text:         #e2e8f0;
+      --text2:        #94a3b8;
+      --text3:        #475569;
+      --low:          #22c55e;
+      --medium:       #f97316;
+      --high:         #ef4444;
+      --critical:     #a855f7;
+      --near-miss:    #facc15;
+      --glow-blue:    0 0 24px rgba(59,130,246,0.35);
+      --glow-purple:  0 0 24px rgba(139,92,246,0.35);
+      --radius:       14px;
+      --radius-sm:    8px;
+      --transition:   0.22s cubic-bezier(0.4,0,0.2,1);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
+
+    /* ── Animated gradient mesh background ─────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59,130,246,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139,92,246,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 50% 50%, rgba(6,182,212,0.04) 0%, transparent 70%);
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .layout {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-rows: 64px 1fr;
+      grid-template-columns: 240px 1fr 320px;
+      grid-template-areas:
+        "header header header"
+        "sidebar main panel";
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    header {
+      grid-area: header;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+      background: linear-gradient(135deg, rgba(10,14,28,0.95), rgba(15,20,40,0.95));
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--glass-border);
+      z-index: 100;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(120deg, #60a5fa, #a78bfa, #22d3ee);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand-icon {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; box-shadow: var(--glow-blue);
+    }
+    .header-stats {
+      display: flex; gap: 28px;
+    }
+    .hstat {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; color: var(--text2);
+    }
+    .hstat-val {
+      font-size: 0.95rem; font-weight: 700; color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--low);
+      box-shadow: 0 0 8px var(--low);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+    .header-right {
+      display: flex; align-items: center; gap: 16px;
+    }
+
+    /* ── Connection badge ────────────────────────────────────────── */
+    #conn-badge {
+      padding: 4px 12px; border-radius: 99px; font-size: 0.72rem;
+      font-weight: 600; letter-spacing: 0.5px;
+      background: rgba(239,68,68,0.15); color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.3);
+      transition: var(--transition);
+    }
+    #conn-badge.connected {
+      background: rgba(34,197,94,0.15); color: #22c55e;
+      border-color: rgba(34,197,94,0.3);
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--bg2);
+      border-right: 1px solid var(--glass-border);
+      padding: 20px 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      overflow-y: auto;
+    }
+    .sidebar-label {
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 1px;
+      color: var(--text3); text-transform: uppercase;
+      padding: 12px 8px 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      font-size: 0.85rem; font-weight: 500; color: var(--text2);
+      cursor: pointer; transition: var(--transition);
+      border: 1px solid transparent;
+    }
+    .nav-item:hover, .nav-item.active {
+      background: var(--glass);
+      border-color: var(--glass-border);
+      color: var(--text);
+    }
+    .nav-item.active { color: var(--accent); border-color: rgba(59,130,246,0.25); }
+    .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .nav-badge {
+      margin-left: auto; padding: 1px 8px; border-radius: 99px;
+      font-size: 0.65rem; font-weight: 700;
+      background: rgba(59,130,246,0.2); color: var(--accent);
+    }
+
+    /* ── Stats cards grid ────────────────────────────────────────── */
+    .mini-stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      padding: 12px 0;
+    }
+    .mstat {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 12px; text-align: center;
+    }
+    .mstat-val {
+      font-size: 1.5rem; font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      background: linear-gradient(120deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .mstat-lbl { font-size: 0.65rem; color: var(--text3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ── Main Area ───────────────────────────────────────────────── */
+    main {
+      grid-area: main;
+      display: flex; flex-direction: column; gap: 16px;
+      padding: 16px; overflow-y: auto;
+    }
+
+    /* ── Tabs ────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex; gap: 4px;
+      background: var(--bg2); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 4px;
+    }
+    .tab-btn {
+      flex: 1; padding: 8px; border-radius: 6px;
+      font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; border: none;
+      background: transparent; color: var(--text2);
+      transition: var(--transition);
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Video / Stream Panel ────────────────────────────────────── */
+    .stream-container {
+      position: relative; border-radius: var(--radius);
+      overflow: hidden; background: #000;
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glow-blue);
+      aspect-ratio: 16/9;
+    }
+    #live-stream {
+      width: 100%; height: 100%;
+      object-fit: contain; display: block;
+    }
+    .stream-overlay {
+      position: absolute; top: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+    }
+    .stream-badge {
+      padding: 3px 10px; border-radius: 99px;
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px;
+      background: rgba(239,68,68,0.9); color: #fff;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .rec-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
+    .severity-hud {
+      padding: 4px 14px; border-radius: 99px;
+      font-size: 0.75rem; font-weight: 700;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid var(--glass-border);
+      color: var(--text);
+      transition: var(--transition);
+    }
+    .stream-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 8px 14px;
+      background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+      display: flex; gap: 12px; align-items: flex-end;
+    }
+    .hud-chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; color: rgba(255,255,255,0.7);
+    }
+    #stream-placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
+      color: var(--text2); font-size: 0.9rem;
+    }
+    #stream-placeholder .placeholder-icon { font-size: 3rem; opacity: 0.3; }
+
+    /* ── Replay Player ───────────────────────────────────────────── */
+    #replay-container {
+      border-radius: var(--radius); overflow: hidden;
+      background: #000; border: 1px solid rgba(139,92,246,0.4);
+      box-shadow: var(--glow-purple);
+      aspect-ratio: 16/9;
+    }
+    #replay-video { width: 100%; height: 100%; object-fit: contain; }
+    .replay-label {
+      text-align: center; font-size: 0.75rem; color: var(--text2);
+      padding: 6px;
+    }
+
+    /* ── Map ─────────────────────────────────────────────────────── */
+    #map {
+      border-radius: var(--radius);
+      border: 1px solid var(--glass-border);
+      overflow: hidden; height: 340px;
+    }
+
+    /* ── Panel (right sidebar) ───────────────────────────────────── */
+    .panel {
+      grid-area: panel;
+      background: var(--bg2);
+      border-left: 1px solid var(--glass-border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--glass-border);
+      font-size: 0.8rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text2);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-clear {
+      font-size: 0.7rem; padding: 3px 8px; border-radius: 4px;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      color: var(--text2); cursor: pointer;
+    }
+    .panel-clear:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+
+    /* ── Event Log ───────────────────────────────────────────────── */
+    #event-log {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .event-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: var(--transition);
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .event-card:hover { border-color: var(--accent); background: rgba(59,130,246,0.06); }
+    .event-card.near-miss { border-color: rgba(250,204,21,0.4); }
+    .event-card.near-miss:hover { background: rgba(250,204,21,0.06); }
+
+    .event-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .event-type {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .event-time {
+      font-size: 0.65rem; color: var(--text3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .sev-badge {
+      display: inline-block; padding: 1px 8px; border-radius: 99px;
+      font-size: 0.65rem; font-weight: 700; margin-top: 3px;
+    }
+    .sev-LOW      { background: rgba(34,197,94,0.15);  color: var(--low); }
+    .sev-MEDIUM   { background: rgba(249,115,22,0.15); color: var(--medium); }
+    .sev-HIGH     { background: rgba(239,68,68,0.15);  color: var(--high); }
+    .sev-CRITICAL { background: rgba(168,85,247,0.15); color: var(--critical); }
+    .sev-NEAR_MISS{ background: rgba(250,204,21,0.15); color: var(--near-miss); }
+
+    .event-detail {
+      font-size: 0.72rem; color: var(--text2);
+      display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px;
+    }
+    .replay-btn {
+      margin-top: 6px; width: 100%;
+      padding: 6px; border-radius: 5px; border: none;
+      font-size: 0.72rem; font-weight: 600; cursor: pointer;
+      background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(59,130,246,0.25));
+      color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);
+      transition: var(--transition);
+    }
+    .replay-btn:hover { background: linear-gradient(135deg, rgba(139,92,246,0.4), rgba(59,130,246,0.4)); }
+
+    /* ── Alert Toast ─────────────────────────────────────────────── */
+    #alert-toasts {
+      position: fixed; top: 75px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+    }
+    .toast {
+      padding: 12px 16px; border-radius: var(--radius-sm);
+      font-size: 0.8rem; font-weight: 500;
+      backdrop-filter: blur(20px);
+      border: 1px solid;
+      animation: toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(60px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .toast.accident {
+      background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #fca5a5;
+    }
+    .toast.near-miss {
+      background: rgba(250,204,21,0.15); border-color: rgba(250,204,21,0.4); color: #fde68a;
+    }
+    .toast.critical {
+      background: rgba(168,85,247,0.2); border-color: rgba(168,85,247,0.5); color: #d8b4fe;
+    }
+    .toast-title { font-weight: 700; margin-bottom: 2px; }
+
+    /* ── Severity Gauge ──────────────────────────────────────────── */
+    .gauge-section { padding: 16px; }
+    .gauge-label { font-size: 0.75rem; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
+    .gauge-bar {
+      height: 8px; border-radius: 99px;
+      background: var(--glass-border); overflow: hidden;
+    }
+    .gauge-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--low), var(--medium), var(--high), var(--critical));
+      transition: width 0.5s ease;
+    }
+    .gauge-val {
+      font-size: 0.72rem; color: var(--text2); text-align: right;
+      margin-top: 4px; font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Route Display ───────────────────────────────────────────── */
+    .route-banner {
+      margin: 8px; border-radius: var(--radius-sm); padding: 10px 12px;
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.25);
+      display: none;
+    }
+    .route-banner.visible { display: block; }
+    .route-header { font-size: 0.78rem; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+    .route-detail { font-size: 0.72rem; color: var(--text2); line-height: 1.6; }
+
+    /* ── XAI toggle ──────────────────────────────────────────────── */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-top: 1px solid var(--glass-border);
+    }
+    .toggle-lbl { font-size: 0.78rem; color: var(--text2); }
+    .toggle {
+      position: relative; width: 38px; height: 20px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--glass-border); border-radius: 99px;
+      transition: var(--transition);
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      height: 14px; width: 14px; left: 3px; bottom: 3px;
+      background: #fff; border-radius: 50%;
+      transition: var(--transition);
+    }
+    input:checked + .toggle-slider { background: var(--accent); }
+    input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+    /* ── Camera selector ────────────────────────────────────────── */
+    .cam-select {
+      background: var(--bg2); border: 1px solid var(--glass-border);
+      color: var(--text); border-radius: var(--radius-sm);
+      padding: 6px 10px; font-size: 0.8rem; cursor: pointer;
+    }
+
+    /* ── Stat Sparkline ──────────────────────────────────────────── */
+    .sparkline-row {
+      display: flex; gap: 8px; align-items: flex-end;
+      padding: 12px 16px; border-top: 1px solid var(--glass-border);
+    }
+    .sparkline-bar {
+      flex: 1; border-radius: 2px;
+      background: var(--accent);
+      transition: height 0.3s ease;
+      max-height: 40px; min-height: 2px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 8px; color: var(--text3); font-size: 0.85rem;
+    }
+    .empty-icon { font-size: 2.5rem; opacity: 0.3; }
+
+    /* ── Grad-CAM overlay ────────────────────────────────────────── */
+    #gradcam-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center;
+      border-radius: var(--radius);
+    }
+    #gradcam-overlay.visible { display: flex; }
+    #gradcam-img { max-width: 90%; max-height: 90%; border-radius: 10px; }
+
+    /* ── Upload Zone ────────────────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--glass-border); border-radius: var(--radius);
+      padding: 32px 24px; text-align: center;
+      cursor: pointer; transition: var(--transition);
+      background: var(--glass);
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.06);
+    }
+    .upload-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+    .upload-icon { font-size: 2.8rem; margin-bottom: 10px; opacity: 0.7; }
+    .upload-title {
+      font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 4px;
+    }
+    .upload-sub { font-size: 0.78rem; color: var(--text2); }
+    .upload-formats {
+      margin-top: 8px; font-size: 0.68rem; color: var(--text3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Upload Progress ─────────────────────────────────────────────── */
+    .upload-progress-wrap {
+      display: none; margin-top: 14px;
+    }
+    .upload-progress-wrap.visible { display: block; }
+    .upload-progress-bar-bg {
+      height: 6px; border-radius: 99px;
+      background: var(--glass-border); overflow: hidden; margin-top: 6px;
+    }
+    .upload-progress-bar {
+      height: 100%; border-radius: 99px; width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.1s linear;
+    }
+    .upload-status {
+      font-size: 0.72rem; color: var(--text2); margin-top: 5px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Upload Stream Panel ─────────────────────────────────────────── */
+    .upload-stream-container {
+      position: relative; border-radius: var(--radius);
+      overflow: hidden; background: #000;
+      border: 1px solid rgba(59,130,246,0.4);
+      box-shadow: var(--glow-blue);
+      aspect-ratio: 16/9; margin-top: 14px;
+      display: none;
+    }
+    .upload-stream-container.visible { display: block; }
+    .upload-stream-container img {
+      width: 100%; height: 100%; object-fit: contain; display: block;
+    }
+    .upload-stream-info {
+      display: flex; gap: 10px; align-items: center;
+      margin-top: 8px; font-size: 0.75rem; color: var(--text2);
+    }
+    .upload-file-name {
+      font-weight: 600; color: var(--text); font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .upload-stop-btn {
+      margin-left: auto; padding: 5px 14px;
+      border: 1px solid rgba(239,68,68,0.4);
+      background: rgba(239,68,68,0.1); color: #fca5a5;
+      border-radius: var(--radius-sm); font-size: 0.72rem;
+      font-weight: 600; cursor: pointer; transition: var(--transition);
+    }
+    .upload-stop-btn:hover { background: rgba(239,68,68,0.25); }
+
+    /* ── Upload History ──────────────────────────────────────────────── */
+    .upload-history { margin-top: 18px; }
+    .upload-history-title {
+      font-size: 0.72rem; font-weight: 700; color: var(--text2);
+      text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
+    }
+    .history-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; border-radius: var(--radius-sm);
+      background: var(--glass); border: 1px solid var(--glass-border);
+      margin-bottom: 6px; transition: var(--transition); cursor: pointer;
+    }
+    .history-item:hover { border-color: var(--accent); background: rgba(59,130,246,0.06); }
+    .history-icon { font-size: 1.2rem; }
+    .history-meta { flex: 1; min-width: 0; }
+    .history-name {
+      font-size: 0.78rem; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-size { font-size: 0.65rem; color: var(--text3); margin-top: 1px; }
+    .history-play {
+      padding: 4px 12px; border-radius: 5px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; font-size: 0.68rem; font-weight: 700;
+      white-space: nowrap;
+    }
+    .history-play:hover { opacity: 0.85; }
+  </style>
+</head>
+
+<body>
+<div id="alert-toasts"></div>
+
+<div class="layout">
+
+  <!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🛡️</div>
+      AegisRoad AI
+    </div>
+    <div class="header-stats">
+      <div class="hstat">
+        <div class="status-dot" id="live-dot"></div>
+        <span>LIVE</span>
+      </div>
+      <div class="hstat">FPS <span class="hstat-val" id="h-fps">–</span></div>
+      <div class="hstat">Tracks <span class="hstat-val" id="h-tracks">0</span></div>
+      <div class="hstat">Events <span class="hstat-val" id="h-events">0</span></div>
+      <div class="hstat">Severity <span class="hstat-val" id="h-severity" style="color:var(--low)">–</span></div>
+    </div>
+    <div class="header-right">
+      <select class="cam-select" id="cam-select" onchange="switchCamera(this.value)">
+        <option value="cam1">Camera 1</option>
+        <option value="dashcam">Dashcam</option>
+        <option value="cam2">Camera 2</option>
+        <option value="cam3">Camera 3</option>
+      </select>
+      <span id="conn-badge">● OFFLINE</span>
+    </div>
+  </header>
+
+  <!-- ═══ SIDEBAR ══════════════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Navigation</div>
+    <div class="nav-item" onclick="showTab('live')" id="nav-live">
+      <span class="nav-icon">📹</span> Live Feed
+    </div>
+    <div class="nav-item" onclick="showTab('replay')" id="nav-replay">
+      <span class="nav-icon">🎬</span> Forensic Replay
+      <span class="nav-badge" id="replay-count">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('map')" id="nav-map">
+      <span class="nav-icon">🗺️</span> Incident Map
+    </div>
+    <div class="nav-item" onclick="showTab('upload')" id="nav-upload">
+      <span class="nav-icon">📂</span> Upload Video
+    </div>
+
+    <div class="sidebar-label">System Stats</div>
+    <div class="mini-stats">
+      <div class="mstat">
+        <div class="mstat-val" id="s-accidents">0</div>
+        <div class="mstat-lbl">Accidents</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-val" id="s-near-miss">0</div>
+        <div class="mstat-lbl">Near-Miss</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-val" id="s-vehicles">0</div>
+        <div class="mstat-lbl">Vehicles</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-val" id="s-victims">0</div>
+        <div class="mstat-lbl">Victims</div>
+      </div>
+    </div>
+
+    <div class="sidebar-label">Severity Gauge</div>
+    <div class="gauge-section">
+      <div class="gauge-label">Current Risk Level</div>
+      <div class="gauge-bar"><div class="gauge-fill" id="gauge-fill" style="width:0%"></div></div>
+      <div class="gauge-val" id="gauge-val">0.00</div>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ══════════════════════════════════════════════════════ -->
+  <main>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-live"   onclick="showTab('live')">📹 Live Feed</button>
+      <button class="tab-btn"        id="tab-replay" onclick="showTab('replay')">🎬 Forensic Replay</button>
+      <button class="tab-btn"        id="tab-map"    onclick="showTab('map')">🗺️ Incident Map</button>
+      <button class="tab-btn"        id="tab-upload" onclick="showTab('upload')">📂 Upload Video</button>
+    </div>
+
+    <!-- Live Feed Tab -->
+    <div class="tab-pane active" id="pane-live">
+      <div class="stream-container" id="stream-wrap">
+        <div id="stream-placeholder">
+          <div class="placeholder-icon">📡</div>
+          <span>Connecting to live stream…</span>
+        </div>
+        <img id="live-stream" alt="Live analysis stream" style="display:none" />
+        <div class="stream-overlay">
+          <div class="stream-badge" id="rec-badge">
+            <div class="rec-dot"></div> LIVE ANALYSIS
+          </div>
+          <div class="severity-hud" id="severity-hud">NO INCIDENT</div>
+        </div>
+        <div class="stream-bottom">
+          <span class="hud-chip" id="hud-fps">FPS: –</span>
+          <span class="hud-chip" id="hud-tracks">Tracks: 0</span>
+          <span class="hud-chip" id="hud-cam">CAM: cam1</span>
+          <span class="hud-chip" id="hud-time">–</span>
+        </div>
+        <!-- Grad-CAM overlay -->
+        <div id="gradcam-overlay">
+          <img id="gradcam-img" alt="Grad-CAM XAI heatmap"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forensic Replay Tab -->
+    <div class="tab-pane" id="pane-replay">
+      <div id="replay-container">
+        <video id="replay-video" controls autoplay loop playsinline>
+          <source src="" type="video/mp4"/>
+        </video>
+      </div>
+      <div class="replay-label" id="replay-label">
+        Click an event in the Event Log → then the 🎬 Replay button to load
+      </div>
+    </div>
+
+    <!-- Map Tab -->
+    <div class="tab-pane" id="pane-map">
+      <div id="map"></div>
+    </div>
+
+    <!-- Upload Video Tab -->
+    <div class="tab-pane" id="pane-upload">
+
+      <!-- Drop zone -->
+      <div class="upload-zone" id="upload-zone"
+           ondragover="event.preventDefault(); this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="upload-file-input" accept="video/*,.mp4,.avi,.mov,.mkv,.webm"
+               onchange="handleFileSelect(this.files[0])"/>
+        <div class="upload-icon">🎥</div>
+        <div class="upload-title">Drop video here or click to browse</div>
+        <div class="upload-sub">Upload any road footage for AI analysis</div>
+        <div class="upload-formats">MP4 · AVI · MOV · MKV · WEBM — up to 500 MB</div>
+      </div>
+
+      <!-- Progress -->
+      <div class="upload-progress-wrap" id="upload-progress-wrap">
+        <div class="upload-status" id="upload-status-text">Uploading…</div>
+        <div class="upload-progress-bar-bg">
+          <div class="upload-progress-bar" id="upload-progress-bar"></div>
+        </div>
+      </div>
+
+      <!-- Live stream of uploaded video -->
+      <div class="upload-stream-container" id="upload-stream-container">
+        <img id="upload-stream-img" alt="Uploaded video AI analysis"/>
+        <div style="position:absolute;top:10px;left:12px">
+          <span style="padding:3px 10px;border-radius:99px;font-size:0.7rem;
+                       font-weight:700;background:rgba(59,130,246,0.9);color:#fff">
+            ⚡ AI PROCESSING
+          </span>
+        </div>
+      </div>
+      <div class="upload-stream-info" id="upload-stream-info" style="display:none">
+        <span class="upload-file-name" id="upload-file-name">–</span>
+        <button class="upload-stop-btn" onclick="stopUploadStream()">⏹ Stop</button>
+      </div>
+
+      <!-- History -->
+      <div class="upload-history">
+        <div class="upload-history-title">Previously Uploaded</div>
+        <div id="upload-history-list">
+          <div style="font-size:0.78rem;color:var(--text3);padding:8px">No uploads yet.</div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ═══ RIGHT PANEL ═══════════════════════════════════════════════ -->
+  <aside class="panel">
+    <div class="panel-header">
+      Event Log
+      <button class="panel-clear" onclick="clearLog()">Clear</button>
+    </div>
+
+    <!-- Route banner -->
+    <div class="route-banner" id="route-banner">
+      <div class="route-header">🚑 Ambulance Route</div>
+      <div class="route-detail" id="route-detail">–</div>
+    </div>
+
+    <!-- XAI toggle -->
+    <div class="toggle-row">
+      <span class="toggle-lbl">🧠 Grad-CAM XAI Overlay</span>
+      <label class="toggle">
+        <input type="checkbox" id="xai-toggle" onchange="toggleXAI(this.checked)"/>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <!-- FPS Sparkline -->
+    <div class="sparkline-row" id="sparkline-row">
+      <!-- Bars inserted by JS -->
+    </div>
+
+    <!-- Event log -->
+    <div id="event-log">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">📭</div>
+        <span>No events yet…</span>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   SaferoadAI Dashboard – Client Logic
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ── State ───────────────────────────────────────────────────────────
+const state = {
+  connected: false,
+  events: [],
+  accidents: 0,
+  nearMisses: 0,
+  vehicles: 0,
+  victims: 0,
+  fps: 0,
+  currentCamera: 'dashcam',
+  replayCount: 0,
+  fpsHistory: Array(16).fill(0),
+  xaiEnabled: false,
+  lastSeverityScore: 0,
+};
+
+// ── Map Init ────────────────────────────────────────────────────────
+let map, heatLayer, markerGroup;
+
+function initMap() {
+  map = L.map('map', {
+    center: [28.5439, 77.3305],
+    zoom: 13,
+    zoomControl: true,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; SaferoadAI | CartoDB',
+    maxZoom: 19,
+  }).addTo(map);
+
+  markerGroup = L.layerGroup().addTo(map);
+  heatLayer   = L.heatLayer([], { radius: 30, blur: 20, maxZoom: 17 }).addTo(map);
+}
+
+// ── Socket.IO ───────────────────────────────────────────────────────
+let socket;
+
+function initSocket() {
+  socket = io({ transports: ['websocket', 'polling'] });
+
+  socket.on('connect', () => {
+    state.connected = true;
+    document.getElementById('conn-badge').textContent = '● LIVE';
+    document.getElementById('conn-badge').classList.add('connected');
+    // Connect stream
+    connectStream(state.currentCamera);
+  });
+
+  socket.on('disconnect', () => {
+    state.connected = false;
+    document.getElementById('conn-badge').textContent = '● OFFLINE';
+    document.getElementById('conn-badge').classList.remove('connected');
+  });
+
+  socket.on('accident_event', onAccidentEvent);
+  socket.on('near_miss_event', onNearMissEvent);
+  socket.on('stats_update',   onStatsUpdate);
+}
+
+// ── Event Handlers ──────────────────────────────────────────────────
+
+function onAccidentEvent(ev) {
+  state.accidents++;
+  state.events.unshift(ev);
+  state.replayCount++;
+
+  updateHeaderStats();
+  addEventCard(ev);
+  updateMap(ev);
+  updateSeverityGauge(ev.severity_score || 0.5);
+  showToast(
+    `🚨 ACCIDENT DETECTED`,
+    `Severity: ${ev.severity || '–'}  |  Conf: ${(ev.confidence*100||0).toFixed(0)}%`,
+    ev.severity === 'CRITICAL' ? 'critical' : 'accident'
+  );
+
+  // Update severity HUD
+  const hud = document.getElementById('severity-hud');
+  hud.textContent = ev.severity || 'DETECTED';
+  hud.style.color = severityColor(ev.severity);
+
+  // Fetch route
+  if (ev.event_id) {
+    fetchRoute(ev.event_id, ev.location);
+  }
+}
+
+function onNearMissEvent(alert) {
+  state.nearMisses++;
+  updateHeaderStats();
+  addEventCard({ ...alert, type: 'NEAR_MISS', severity: 'NEAR_MISS' });
+  showToast(
+    `⚡ NEAR-MISS  #${alert.id_a} ↔ #${alert.id_b}`,
+    `Dist: ${alert.distance_px?.toFixed(0)}px  Angle: ${alert.angle_deg?.toFixed(0)}°`,
+    'near-miss'
+  );
+  document.getElementById('s-near-miss').textContent = state.nearMisses;
+}
+
+function onStatsUpdate(stats) {
+  state.fps      = stats.fps     || 0;
+  state.vehicles = stats.tracks  || 0;
+  state.victims  = stats.victims || 0;
+
+  document.getElementById('h-fps').textContent    = state.fps.toFixed(1);
+  document.getElementById('h-tracks').textContent = state.vehicles;
+  document.getElementById('hud-fps').textContent  = `FPS: ${state.fps.toFixed(1)}`;
+  document.getElementById('hud-tracks').textContent = `Tracks: ${state.vehicles}`;
+  document.getElementById('hud-time').textContent = new Date().toLocaleTimeString();
+  document.getElementById('s-vehicles').textContent = state.vehicles;
+  document.getElementById('s-victims').textContent  = state.victims;
+
+  updateSparkline(state.fps);
+}
+
+// ── Map Helpers ──────────────────────────────────────────────────────
+
+function updateMap(ev) {
+  if (!ev.location || !ev.location.lat) return;
+  const { lat, lon } = ev.location;
+
+  const color = severityColor(ev.severity);
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:${color};
+                       border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 12px ${color}"></div>`,
+    iconAnchor: [9, 9],
+  });
+
+  const marker = L.marker([lat, lon], { icon }).addTo(markerGroup);
+  marker.bindPopup(`
+    <strong>${ev.type || 'ACCIDENT'}</strong><br/>
+    Severity: <span style="color:${color}">${ev.severity || '–'}</span><br/>
+    Confidence: ${(ev.confidence * 100 || 0).toFixed(0)}%<br/>
+    ${ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : ''}
+  `);
+
+  heatLayer.addLatLng([lat, lon, ev.severity_score || 0.5]);
+  map.panTo([lat, lon]);
+}
+
+// ── Event Log Card ───────────────────────────────────────────────────
+
+function addEventCard(ev) {
+  const log = document.getElementById('event-log');
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+
+  state.events.splice(200);   // cap at 200 entries
+
+  const card = document.createElement('div');
+  card.className = `event-card ${ev.type === 'NEAR_MISS' ? 'near-miss' : ''}`;
+  card.id = `card-${ev.event_id || Date.now()}`;
+
+  const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleTimeString() : 'now';
+  const sevClass = `sev-${ev.severity || 'MEDIUM'}`;
+
+  card.innerHTML = `
+    <div class="event-header">
+      <span class="event-type" style="color:${severityColor(ev.severity)}">
+        ${ev.type || 'ACCIDENT'}
+      </span>
+      <span class="event-time">${ts}</span>
+    </div>
+    <span class="sev-badge ${sevClass}">${ev.severity || 'MEDIUM'}</span>
+    <div class="event-detail">
+      ${ev.confidence !== undefined ? `<span>Conf: ${(ev.confidence*100).toFixed(0)}%</span>` : ''}
+      ${ev.distance_px !== undefined ? `<span>Dist: ${ev.distance_px.toFixed(0)}px</span>` : ''}
+      ${ev.camera_id ? `<span>${ev.camera_id}</span>` : ''}
+    </div>
+    ${ev.event_id ? `<button class="replay-btn" onclick="loadReplay('${ev.event_id}')">🎬 Watch Forensic Replay</button>` : ''}
+  `;
+
+  document.getElementById('h-events').textContent = ++state.events.length;
+  log.prepend(card);
+  document.getElementById('replay-count').textContent = state.replayCount;
+}
+
+// ── Replay ───────────────────────────────────────────────────────────
+
+function loadReplay(eventId) {
+  showTab('replay');
+  const video = document.getElementById('replay-video');
+  const label = document.getElementById('replay-label');
+  label.textContent = 'Loading replay…';
+  video.src = `/replay/${eventId}`;
+  video.load();
+  video.play().catch(() => {});
+  video.oncanplay = () => {
+    label.textContent = `🎬 Forensic Replay — Event ${eventId.slice(0, 8)}…`;
+  };
+  video.onerror = () => {
+    label.textContent = '⏳ Replay rendering in progress, try again in a moment…';
+  };
+}
+
+// ── Route Display ────────────────────────────────────────────────────
+
+function fetchRoute(eventId, location) {
+  fetch(`/route/${eventId}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status !== 'ok') return;
+      const banner = document.getElementById('route-banner');
+      const detail = document.getElementById('route-detail');
+      banner.classList.add('visible');
+      detail.innerHTML = `
+        🏥 <strong>${data.hospital_name}</strong><br/>
+        Distance: ${data.distance_km} km &nbsp;|&nbsp; ETA: ~${data.eta_minutes} min<br/>
+        Algorithm: ${data.algorithm}
+      `;
+      // Draw route on map
+      if (data.waypoints && data.waypoints.length > 0) {
+        const pts = data.waypoints.map(w => [w.lat, w.lon]);
+        L.polyline(pts, { color: '#3b82f6', weight: 3, opacity: 0.7, dashArray: '6 4' })
+          .addTo(map);
+      }
+    })
+    .catch(() => {});
+}
+
+// ── Camera Stream ────────────────────────────────────────────────────
+
+// Auto-discover which camera is streaming from the API
+function discoverCameras() {
+  fetch('/health')
+    .then(r => r.json())
+    .then(data => {
+      // Try /stream/<id> for known IDs by probing img load
+      // Auto-select the first working stream
+      const sel = document.getElementById('cam-select');
+      const knownCams = Array.from(sel.options).map(o => o.value);
+      // Test each camera option silently
+      knownCams.forEach(camId => {
+        const probe = new Image();
+        probe.onload = () => {
+          // This camera has a stream — auto-select if no stream yet shown
+          const liveImg = document.getElementById('live-stream');
+          if (!liveImg.src || liveImg.style.display === 'none') {
+            sel.value = camId;
+            state.currentCamera = camId;
+            connectStream(camId);
+          }
+        };
+        // Probe with a HEAD-like trick: if the MJPEG returns data, onload fires
+        probe.src = `/stream/${camId}?probe=1&t=${Date.now()}`;
+      });
+    })
+    .catch(() => {});
+}
+
+function connectStream(cameraId) {
+  const img = document.getElementById('live-stream');
+  const placeholder = document.getElementById('stream-placeholder');
+  img.src = `/stream/${cameraId}?t=${Date.now()}`;
+  img.style.display = 'block';
+  if (placeholder) placeholder.style.display = 'none';
+  document.getElementById('hud-cam').textContent = `CAM: ${cameraId}`;
+}
+
+function switchCamera(cameraId) {
+  state.currentCamera = cameraId;
+  connectStream(cameraId);
+}
+
+// ── XAI Toggle ───────────────────────────────────────────────────────
+
+function toggleXAI(enabled) {
+  state.xaiEnabled = enabled;
+  // Emit preference to server
+  if (socket) socket.emit('set_xai', { enabled });
+}
+
+// ── Tab Switching ────────────────────────────────────────────────────
+
+function showTab(name) {
+  ['live', 'replay', 'map', 'upload'].forEach(t => {
+    document.getElementById(`pane-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-${t}`)?.classList.remove('active');
+    document.getElementById(`nav-${t}`)?.classList.remove('active');
+  });
+  document.getElementById(`pane-${name}`)?.classList.add('active');
+  document.getElementById(`tab-${name}`)?.classList.add('active');
+  document.getElementById(`nav-${name}`)?.classList.add('active');
+
+  if (name === 'map' && map) { map.invalidateSize(); }
+  if (name === 'upload') { loadUploadHistory(); }
+}
+
+// ── Severity Helpers ─────────────────────────────────────────────────
+
+function severityColor(sev) {
+  const m = { LOW: '#22c55e', MEDIUM: '#f97316', HIGH: '#ef4444', CRITICAL: '#a855f7', NEAR_MISS: '#facc15' };
+  return m[sev] || '#94a3b8';
+}
+
+function updateSeverityGauge(score) {
+  state.lastSeverityScore = Math.max(state.lastSeverityScore * 0.9, score);
+  const pct = (state.lastSeverityScore * 100).toFixed(1);
+  document.getElementById('gauge-fill').style.width = pct + '%';
+  document.getElementById('gauge-val').textContent = state.lastSeverityScore.toFixed(3);
+}
+
+// ── Header Stats ─────────────────────────────────────────────────────
+
+function updateHeaderStats() {
+  document.getElementById('s-accidents').textContent = state.accidents;
+  document.getElementById('h-severity').textContent  =
+    state.lastSeverityScore > 0.7 ? 'CRITICAL' :
+    state.lastSeverityScore > 0.55 ? 'HIGH' :
+    state.lastSeverityScore > 0.3  ? 'MEDIUM' : 'LOW';
+}
+
+// ── Toast ────────────────────────────────────────────────────────────
+
+function showToast(title, body, type='accident') {
+  const container = document.getElementById('alert-toasts');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<div class="toast-title">${title}</div><div>${body}</div>`;
+  container.prepend(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
+// ── Sparkline ────────────────────────────────────────────────────────
+
+function updateSparkline(fps) {
+  state.fpsHistory.push(fps);
+  state.fpsHistory = state.fpsHistory.slice(-16);
+  const row = document.getElementById('sparkline-row');
+  const max = Math.max(...state.fpsHistory, 1);
+  row.innerHTML = state.fpsHistory.map(v => {
+    const h = Math.round((v / max) * 40);
+    const alpha = 0.4 + 0.6 * (v / max);
+    return `<div class="sparkline-bar" style="height:${h}px;opacity:${alpha}"></div>`;
+  }).join('');
+}
+
+// ── Clear Log ────────────────────────────────────────────────────────
+
+function clearLog() {
+  const log = document.getElementById('event-log');
+  log.innerHTML = '<div class="empty-state" id="empty-state"><div class="empty-icon">📭</div><span>No events yet…</span></div>';
+  state.events = [];
+  document.getElementById('h-events').textContent = 0;
+}
+
+// ── Poll events on load (for when WS is not connected yet) ───────────
+
+function pollEvents() {
+  fetch('/events?per_page=20')
+    .then(r => r.json())
+    .then(data => {
+      if (data.events) {
+        data.events.forEach(ev => {
+          if (!state.events.find(e => e.event_id === ev.event_id)) {
+            onAccidentEvent(ev);
+          }
+        });
+      }
+    })
+    .catch(() => {});
+}
+
+// ── Upload Video Feature ───────────────────────────────────────────
+
+let currentUploadFilename = null;
+
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  const allowed = ['video/mp4','video/avi','video/quicktime','video/x-matroska','video/webm'];
+  const ext = file.name.split('.').pop().toLowerCase();
+  const allowedExt = ['mp4','avi','mov','mkv','webm'];
+  if (!allowedExt.includes(ext)) {
+    showToast('Invalid file', `Only video files are supported (${allowedExt.join(', ')})`, 'near-miss');
+    return;
+  }
+  uploadFile(file);
+}
+
+function uploadFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // Show progress UI
+  const progWrap = document.getElementById('upload-progress-wrap');
+  const progBar  = document.getElementById('upload-progress-bar');
+  const progText = document.getElementById('upload-status-text');
+  progWrap.classList.add('visible');
+  progBar.style.width = '0%';
+  progText.textContent = `Uploading ${file.name} (${(file.size/1048576).toFixed(1)} MB)...`;
+
+  // Use XMLHttpRequest for real progress
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/upload');
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      progBar.style.width = pct + '%';
+      progText.textContent = `Uploading... ${pct}%  (${(e.loaded/1048576).toFixed(1)}/${(e.total/1048576).toFixed(1)} MB)`;
+    }
+  };
+
+  xhr.onload = () => {
+    progWrap.classList.remove('visible');
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      showToast('Upload complete!', `${data.filename}  (${data.size_mb} MB)`, 'accident');
+      startUploadStream(data.filename, data.stream_url);
+      loadUploadHistory();
+    } else {
+      const err = JSON.parse(xhr.responseText);
+      showToast('Upload failed', err.error || 'Unknown error', 'near-miss');
+    }
+  };
+
+  xhr.onerror = () => {
+    progWrap.classList.remove('visible');
+    showToast('Upload error', 'Network error. Is the API server running?', 'near-miss');
+  };
+
+  xhr.send(formData);
+}
+
+function startUploadStream(filename, streamUrl) {
+  currentUploadFilename = filename;
+
+  const container = document.getElementById('upload-stream-container');
+  const img       = document.getElementById('upload-stream-img');
+  const info      = document.getElementById('upload-stream-info');
+  const nameEl    = document.getElementById('upload-file-name');
+
+  img.src = streamUrl + '?t=' + Date.now();
+  container.classList.add('visible');
+  info.style.display = 'flex';
+  nameEl.textContent = filename;
+
+  showToast('AI Analysis Started', `Processing: ${filename}`, 'accident');
+}
+
+function stopUploadStream() {
+  if (currentUploadFilename) {
+    fetch('/stop_upload/' + currentUploadFilename, { method: 'POST' }).catch(() => {});
+  }
+  const img       = document.getElementById('upload-stream-img');
+  const container = document.getElementById('upload-stream-container');
+  const info      = document.getElementById('upload-stream-info');
+  img.src = '';
+  container.classList.remove('visible');
+  info.style.display = 'none';
+  currentUploadFilename = null;
+}
+
+function loadUploadHistory() {
+  fetch('/uploads')
+    .then(r => r.json())
+    .then(data => {
+      const list = document.getElementById('upload-history-list');
+      if (!data.uploads || data.uploads.length === 0) {
+        list.innerHTML = '<div style="font-size:0.78rem;color:var(--text3);padding:8px">No uploads yet.</div>';
+        return;
+      }
+      list.innerHTML = data.uploads.map(u => `
+        <div class="history-item" onclick="startUploadStream('${u.filename}', '${u.stream_url}')">
+          <span class="history-icon">🎥</span>
+          <div class="history-meta">
+            <div class="history-name">${u.filename}</div>
+            <div class="history-size">${u.size_mb} MB</div>
+          </div>
+          <button class="history-play" onclick="event.stopPropagation();startUploadStream('${u.filename}','${u.stream_url}')">
+            ▶ Analyse
+          </button>
+        </div>
+      `).join('');
+    })
+    .catch(() => {});
+}
+
+// ── Init ────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  initSocket();
+  showTab('live');
+
+  // Auto-discover and connect to the first available camera stream
+  // Try dashcam first (most likely for this session), fall back to cam1
+  setTimeout(() => {
+    discoverCameras();
+  }, 2000);
+
+  // Fallback: also directly try dashcam stream after 1s
+  setTimeout(() => {
+    const sel = document.getElementById('cam-select');
+    const preferred = ['dashcam', 'cam1', 'cam2'];
+    preferred.forEach((id, i) => {
+      setTimeout(() => {
+        const liveImg = document.getElementById('live-stream');
+        if (!liveImg.src || liveImg.naturalWidth === 0) {
+          sel.value = id;
+          state.currentCamera = id;
+          connectStream(id);
+        }
+      }, i * 600);
+    });
+  }, 1500);
+
+  // Fallback polling every 5 seconds
+  setInterval(pollEvents, 5000);
+
+  // Upload history refresh every 30 seconds
+  setInterval(loadUploadHistory, 30000);
+
+  // Gauge decay
+  setInterval(() => {
+    if (state.lastSeverityScore > 0.01) {
+      state.lastSeverityScore *= 0.97;
+      updateSeverityGauge(0);
+    }
+  }, 1000);
+});
+</script>
+</body>
+</html>

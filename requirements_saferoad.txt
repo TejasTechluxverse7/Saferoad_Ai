@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────
+# SaferoadAI – Full Ecosystem Requirements
+# Install:  pip install -r requirements_saferoad.txt
+# ─────────────────────────────────────────────────────────────
+
+# ── Core Vision ──────────────────────────────────────────────
+ultralytics>=8.0
+opencv-python>=4.9
+numpy>=1.26
+
+# ── Tracking ─────────────────────────────────────────────────
+supervision>=0.21          # includes ByteTrack
+
+# ── Deep Learning / ReID / Grad-CAM ──────────────────────────
+torch>=2.0
+torchvision>=0.15
+grad-cam>=1.4
+
+# ── Web API ──────────────────────────────────────────────────
+flask>=3.0
+flask-socketio>=5.3
+eventlet>=0.35             # async socket driver
+
+# ── Alerts / Comms ───────────────────────────────────────────
+requests>=2.31
+paho-mqtt>=1.6
+
+# ── Utilities ────────────────────────────────────────────────
+pillow>=10.0
+scipy>=1.12

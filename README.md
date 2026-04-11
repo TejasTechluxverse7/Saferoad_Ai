@@ -1,149 +1,97 @@
-# SaferoadAI
+# 🛡️ AegisRoad AI - Intelligent Predictive Road Safety Ecosystem
 
-SaferoadAI is a real-time, edge-based accident detection and smart alerting system designed for smart-city CCTV infrastructure. The system ingests CCTV or live video feeds, runs an optimized YOLOv8 model at the edge, performs temporal accident verification, and broadcasts VANET/V2X-style alerts alongside notifications to the nearest hospitals using the **OLA Maps API**.
+AegisRoad AI is a **production-ready, demo-ready** modular system for real-time road safety, accident detection, and predictive analytics. Designed for hackathons and high-stakes infrastructure deployments.
 
-## Features
+---
 
-- **Real-time accident detection** using YOLOv8 (Edge AI Detection Module).
-- **Temporal accident verification** using a lightweight rule-based temporal module (`temporal_module.py`) approximating tracking + motion reasoning.
-- **Integration with CCTV or live video feeds** via `aegis_engine.py` (CLI) and `flask_app.py` (web demo).
-- **Automatic alert system** using OLA Maps API to notify the nearest hospital.
-- **VANET/V2X-style JSON alerts** via `vanet_layer.py`, with optional MQTT broadcast and HTTP forwarding for RSU/vehicle simulators.
-- **Frame capture and image conversion** to URL for message attachments.
+## 🚀 Key Features
 
-## Installation
+*   **Real-time Detection**: YOLOv8-powered accident detection (`aegis_model.pt`).
+*   **Intelligent Tracking**: ByteTrack integration for persistent vehicle IDs.
+*   **Near-Miss Prediction**: Velocity-based trajectory analysis with collision point estimation.
+*   **Severity Classification**: Categorizes incidents from LOW to CRITICAL based on speed, overlap, and vehicle count.
+*   **Forensic Replay**: Automatic generation of slow-motion MP4 reconstructions of accidents.
+*   **Explainable AI (XAI)**: Grad-CAM heatmap overlays for transparency in HIGH/CRITICAL events.
+*   **Victim Detection**: Heuristic-based fallen person detection.
+*   **Multi-Camera ReID**: ResNet-18 based vehicle re-identification across different camera IDs.
+*   **Smart Analytics Dashboard**: Glassmorphism UI with MJPEG streaming, real-time map heatmap, and event logs.
+*   **Smart Routing**: A* algorithm to route ambulances to the nearest hospital via `city_graph.json`.
 
-### Prerequisites
+---
 
-Ensure you have the following installed before proceeding:
+## 🛠️ Setup & Installation
 
-- Python 3.8+
-- PyTorch
-- Ultralytics YOLOv8
-- OpenCV
-- Streamlit (for deployment, if needed)
-- OLA Maps API access
+### 1. Requirements
+*   Python 3.10+
+*   OpenCV, PyTorch, Ultralytics, Supervision, Flask-SocketIO
 
-### Clone the Repository
-
+### 2. Install Dependencies
 ```bash
-git clone https://github.com/aayush010904/SaferoadAI.git
-cd SaferoadAI
+pip install -r requirements_saferoad.txt
 ```
 
-### Install Dependencies
+---
 
+## 🧪 Testing Procedure
+
+### 1. Functional Verification (Quick Start)
+Run the main orchestrator with a sample accident video to see the full HUD and logic in action:
 ```bash
-pip install -r requirements.txt
+python saferoad_main.py --source sample_videos/acci.mp4
 ```
+*   **Keyboard Controls**: `Q` to Quit, `P` to Pause, `R` to Replay.
+*   **What to look for**: Trajectory lines (fading), Speed arrows, Pulsing near-miss circles, Severity banners.
 
-### Dataset
-
-Dataset used for pre-training: [Roboflow dataset URL](https://universe.roboflow.com/accident-detection-model/accident-detection-model/dataset/2). Model is included as `CrashSentinel_Prime.pt`.
-
-## Usage
-
-### Phase 1: Core edge accident pipeline (CLI)
-
-To start the accident detection system on a local video, run:
-
+### 2. Automated Feature Check
+Verify every internal engine (Detection, Tracking, Prediction, Severity, Routing, etc.) with the built-in validation script:
 ```bash
-python aegis_engine.py --source sample_videos/acci.mp4
+python verify_features.py
 ```
+This script runs mock data through every module to ensure architectural integrity.
 
-### How It Works (aligned with the PDF)
+### 3. Dashboard & Upload Testing
+Launch the full API stack and interact via the web browser:
+1. Start the system: `python saferoad_main.py --source sample_videos/dashcam.mp4 --port 5050`
+2. Open **http://localhost:5050** in your browser.
+3. **Live Feed**: Confirm the stream loads and connection shows "LIVE".
+4. **Upload Video**: Go to the "Upload Video" tab, drag/drop a local video file, and watch the AI process it in real-time.
 
-- `aegis_engine.py` imports functions from `temporal_module.py` to continuously process frames through the `CrashSentinel_Prime.pt` network.
-- For each frame, YOLOv8 produces accident-class detections which are converted into `Detection` objects.
-- The temporal verifier aggregates motion and overlap across a short window and triggers an accident event only when the pattern is consistent with a collision and post-impact stillness.
-- When an accident is confirmed:
-  - A frame is saved to `accident_frames/`.
-  - The frame path is converted into a URL by `Image2Url.py` and sent to the nearest hospitals through the demo chat backend.
-  - A VANET/V2X-style JSON alert is generated and optionally published over MQTT and/or HTTP.
+### 4. Forensic & Evidence Testing
+After an accident detection (or demo trigger):
+*   Check the `accident_frames/` folder.
+*   Look for `replay_{event_id}.mp4` to see the slow-motion reconstruction.
+*   Check the `evidence_{event_id}/` folder for pre/post accident frames and JSON metadata.
 
-## Flask Live Stream Demo (uses temporal module + VANET alerts)
+---
 
-The Flask app reuses the same YOLO model and the temporal verifier defined in `temporal_module.py` for live MJPEG streaming. Accident events increment counters and publish VANET-style alerts during streaming.
+## 🧠 Training Procedure
 
-Run locally:
-
+To retrain or fine-tune the model using the Roboflow Accident Dataset:
 ```bash
-pip install -r requirements.txt
-python flask_app.py
+python model_train.py --epochs 25 --batch 16 --device 0
 ```
+This script will:
+1. Automatically fetch the dataset.
+2. Train a YOLOv8n model.
+3. Save the best weights as `models/aegis_model.pt`.
 
-Then open http://localhost:5000, upload or pick a sample video, click **Process Detection** to start the live processed stream. Accident counts appear after the stream completes. The “See live alerts” button is a placeholder—point it to your real alerts/messages URL.
+---
 
-## Deployment
+## 📁 Project Structure
 
-### Quick local server (Waitress)
+*   `saferoad_main.py`: Main system orchestrator.
+*   `engine/`: Core logic (Severity, Forensic, GradCAM, Victim Detector, Evidence).
+*   `tracking/`: ByteTrack wrapper.
+*   `prediction/`: Trajectory and Near-miss engines.
+*   `fusion/`: ReID engine for multi-camera tracking.
+*   `api/`: Flask-SocketIO server and A* Routing.
+*   `dashboard/`: Front-end glassmorphism UI.
+*   `model_train.py`: Automated training pipeline.
 
-```bash
-pip install waitress
-waitress-serve --port=5000 flask_app:app
-```
+---
 
-### Container (recommended for hosting)
+## 👨‍💻 Developer
+**Tejas Vilas Kondhalkar**
 
-Example Dockerfile:
-
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENV PORT=5000
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "flask_app:app"]
-```
-
-Build and run:
-
-```bash
-docker build -t saferoad-ai .
-docker run -p 5000:5000 saferoad-ai
-```
-
-Host this container on services like Render, Railway, Fly.io, AWS ECS/Fargate, or Azure Web App for Containers. Ensure ffmpeg/H.264 support is available in your base image if you need MP4 output.
-
-### VANET / Vehicle subscriber demo
-
-To simulate a vehicle/RSU listening to accident alerts over MQTT:
-
-```bash
-export MQTT_BROKER=localhost
-python vanet_subscriber.py
-```
-
-This will print each VANET-style JSON alert emitted by `app.py` / `flask_app.py` to the console, approximating the “Vehicle/RSU Response Simulation” part of the project document.
-
-## Project Structure
-
-```
-SaferoadAI/
-├── aegis_engine.py       # Main application script
-├── aegis_test_runner.py  # Automation and video testing script
-├── requirements_aegis.txt# Python dependencies
-├── README.md             # Project documentation
-├── CrashSentinel_Prime.pt# YOLO model optimized for accident detection
-├── Image2Url.py          # Converts detected accident frames to image URLs
-├── NearestHospital.py    # Fetches nearest hospital using OLA Maps API
-├── SendMessage.py        # Sends alert messages with accident details
-├── currentLocation.py    # Determines the user's current location
-└── temporal_module.py    # Logic checking spatial detection consistency
-```
-
-## Future Enhancements
-
-- Improving model accuracy with more training data.
-- Expanding API support for other mapping services.
-- Implementing real-time traffic management integration.
-
-## Contributions
-
-Feel free to open an issue or submit a pull request if you’d like to contribute!
-
-## License
-
-This project is licensed under the MIT License.
-
+---
+*Built for Hackathon Excellence. Production Ready. Protected by Aegis.*
